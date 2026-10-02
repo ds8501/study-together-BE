@@ -10,6 +10,7 @@ import { z } from "zod";
 const prisma = new PrismaClient();
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
+const host = process.env.HOST ?? "0.0.0.0";
 const origins = (process.env.FRONTEND_ORIGIN ?? "http://localhost:3000").split(",").map(value => value.trim()).filter(Boolean);
 if (process.env.NODE_ENV !== "production") origins.push("http://127.0.0.1:3000", "http://localhost:3000");
 const secret = process.env.AUTH_SECRET;
@@ -112,6 +113,7 @@ function localDayKey(date: Date, timeZone: string) {
 }
 function dayKey(date: Date) { return date.toISOString().slice(0, 10); }
 function dayDate(key: string) { return new Date(`${key}T00:00:00.000Z`); }
+function utcDay(date: Date) { return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())); }
 async function readStudyStats(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { timeZone: true } });
   const timeZone = user?.timeZone ?? "Asia/Kolkata";
@@ -200,7 +202,7 @@ app.use((error: unknown, _req: express.Request, res: express.Response, _next: ex
   if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues[0]?.message ?? "Invalid input" });
   return res.status(500).json({ error: "Something went wrong" });
 });
-const server = app.listen(port, "127.0.0.1", () => console.log(`Study Together API listening on http://127.0.0.1:${port}`));
+const server = app.listen(port, host, () => console.log(`Study Together API listening on http://${host}:${port}`));
 async function shutdown() { server.close(); await prisma.$disconnect(); }
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);

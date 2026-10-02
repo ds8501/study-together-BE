@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: study-together-api
+    runtime: node
+    buildCommand: yarn install --non-interactive && yarn build
+    startCommand: yarn start
+    healthCheckPath: /health
