@@ -3,7 +3,8 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import bcrypt from "bcryptjs";
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
+import { OAuth2Client } from "google-auth-library";
 import { Prisma, PrismaClient, TopicDifficulty, TopicPriority, TopicStatus } from "@prisma/client";
 import { z } from "zod";
 
@@ -52,6 +53,66 @@ const registration = z.object({ name: z.string().trim().min(2).max(80), email: z
 const login = z.object({ email: z.string().trim().email(), password: z.string().min(1).max(128) });
 
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
+
+const googleOAuthCookieOptions = { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/", maxAge: 10 * 60 * 1000 };
+const clearGoogleOAuthCookieOptions = { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/" };
+const frontendUrl = (process.env.FRONTEND_URL ?? origins[0] ?? "http://localhost:3000").replace(/\/$/, "");
+function googleAuthFailure(res: express.Response, reason = "google") {
+  res.clearCookie("google_oauth_state", clearGoogleOAuthCookieOptions);
+  res.clearCookie("google_oauth_nonce", clearGoogleOAuthCookieOptions);
+  return res.redirect(303, `${frontendUrl}/?authError=${encodeURIComponent(reason)}`);
+}
+app.get("/auth/google", (req, res) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI;
+  if (!clientId || !process.env.GOOGLE_CLIENT_SECRET || !redirectUri) return googleAuthFailure(res, "google_not_configured");
+  const state = randomBytes(32).toString("base64url");
+  const nonce = randomBytes(32).toString("base64url");
+  res.cookie("google_oauth_state", state, googleOAuthCookieOptions);
+  res.cookie("google_oauth_nonce", nonce, googleOAuthCookieOptions);
+  const googleClient = new OAuth2Client(clientId, process.env.GOOGLE_CLIENT_SECRET, redirectUri);
+  return res.redirect(302, googleClient.generateAuthUrl({ access_type: "online", scope: ["openid", "email", "profile"], state, nonce, prompt: "select_account" }));
+});
+app.get("/auth/google/callback", async (req, res) => {
+  const stateCookie = req.cookies.google_oauth_state;
+  const nonceCookie = req.cookies.google_oauth_nonce;
+  const state = typeof req.query.state === "string" ? req.query.state : "";
+  const code = typeof req.query.code === "string" ? req.query.code : "";
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI;
+  if (!stateCookie || !nonceCookie || !state || !code || !clientId || !clientSecret || !redirectUri) return googleAuthFailure(res, "google");
+  const providedState = Buffer.from(state);
+  const expectedState = Buffer.from(String(stateCookie));
+  if (providedState.length !== expectedState.length || !timingSafeEqual(providedState, expectedState)) return googleAuthFailure(res, "google");
+  try {
+    const googleClient = new OAuth2Client(clientId, clientSecret, redirectUri);
+    const { tokens } = await googleClient.getToken(code);
+    if (!tokens.id_token) return googleAuthFailure(res);
+    const ticket = await googleClient.verifyIdToken({ idToken: tokens.id_token, audience: clientId });
+    const identity = ticket.getPayload();
+    if (!identity || identity.nonce !== nonceCookie || identity.email_verified !== true || !identity.email || !identity.sub) return googleAuthFailure(res);
+    const email = identity.email.trim().toLowerCase();
+    if (!email.endsWith("@gmail.com") && !identity.hd) return googleAuthFailure(res, "google_email");
+    const existing = await prisma.user.findUnique({ where: { email } });
+    let user = existing;
+    if (!user) {
+      const passwordHash = await bcrypt.hash(randomBytes(48).toString("base64url"), 12);
+      user = await prisma.$transaction(async tx => {
+        const created = await tx.user.create({ data: { name: identity.name?.trim().slice(0, 80) || email.split("@")[0], email, avatar: identity.picture, passwordHash } });
+        const workspace = await tx.workspace.create({ data: { name: "Study Room", members: { create: { userId: created.id, role: "OWNER" } } } });
+        await tx.studyPlan.create({ data: { workspaceId: workspace.id, ownerId: created.id, name: `${created.name}’s roadmap` } });
+        return created;
+      });
+    }
+    setSession(res, user.id);
+    res.clearCookie("google_oauth_state", clearGoogleOAuthCookieOptions);
+    res.clearCookie("google_oauth_nonce", clearGoogleOAuthCookieOptions);
+    return res.redirect(303, frontendUrl);
+  } catch {
+    return googleAuthFailure(res);
+  }
+});
 app.post("/auth/register", async (req, res, next) => {
   try {
     const input = registration.parse(req.body);
