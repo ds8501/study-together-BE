@@ -22,7 +22,7 @@ public class StudyController {
         this.studyService = studyService;
     }
 
-    @GetMapping("/health")
+    @GetMapping({"/health", "/"})
     public Map<String, String> health() {
         return studyService.health();
     }
