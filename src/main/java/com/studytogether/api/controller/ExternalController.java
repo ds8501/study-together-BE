@@ -16,8 +16,8 @@ public class ExternalController {
     }
 
     @GetMapping("/auth/google")
-    public RedirectView googleStart(HttpServletResponse response) {
-        return externalAuthService.googleStart(response);
+    public RedirectView googleStart(HttpServletRequest request, HttpServletResponse response) {
+        return externalAuthService.googleStart(request, response);
     }
 
     @GetMapping("/auth/google/callback")
