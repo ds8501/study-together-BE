@@ -1,0 +1,17 @@
+{
+  "title": "Wallet Ledger: Incorrect Money Movement",
+  "language": "Java",
+  "framework": "JDK 17+",
+  "difficulty": "Medium",
+  "estimatedMinutes": 40,
+  "bugCount": 5,
+  "candidateBrief": "A wallet service produces inconsistent balances. Investigate validation, overdraft handling, transfer atomicity, and transaction replay behavior.",
+  "topics": [
+    "BigDecimal",
+    "idempotency",
+    "invariants",
+    "transaction safety"
+  ],
+  "runCommand": "mkdir -p out && javac -d out src/main/java/interview/*.java src/test/java/interview/*.java && java -cp out interview.LedgerTest",
+  "accessLevel": "FREE"
+}

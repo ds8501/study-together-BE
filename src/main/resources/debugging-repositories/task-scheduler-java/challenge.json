@@ -1,0 +1,17 @@
+{
+  "title": "Task Scheduler: Duplicate and Invalid Claims",
+  "language": "Java",
+  "framework": "JDK 17+",
+  "difficulty": "Medium",
+  "estimatedMinutes": 35,
+  "bugCount": 5,
+  "candidateBrief": "The worker sometimes runs tasks more than once, claims cancelled tasks, and records invalid state transitions. Diagnose and fix the scheduler.",
+  "topics": [
+    "state transitions",
+    "thread safety",
+    "idempotency",
+    "input validation"
+  ],
+  "runCommand": "mkdir -p out && javac -d out src/main/java/interview/*.java src/test/java/interview/*.java && java -cp out interview.SchedulerTest",
+  "accessLevel": "FREE"
+}

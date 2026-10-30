@@ -56,3 +56,13 @@ Deploy this backend repository as a **Web Service** using its Dockerfile:
 - `GET /study-plans`, `POST /study-plans/{planId}/topics`
 - `PATCH /topics/{topicId}`, `DELETE /topics/{topicId}`
 - `GET /study-stats`, `POST /study-sessions`
+
+## Repository debugging interview
+
+The three free Java interview repositories live under `src/main/resources/debugging-repositories/` and are served by the API:
+
+- `GET /debugging-repositories` returns the free repository catalog and bundled source/test files.
+- `GET /debugging-repositories/{id}` returns one repository.
+- `POST /debugging-repositories/{id}/evaluate` evaluates edited source using deterministic source checks. Send `{ "files": { "src/main/java/interview/Inventory.java": "..." } }`.
+
+The evaluator inspects submitted source text and does not compile or execute user-submitted Java. Repository test files are bundled as read-only challenge material.

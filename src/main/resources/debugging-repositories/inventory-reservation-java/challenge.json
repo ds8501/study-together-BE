@@ -1,0 +1,17 @@
+{
+  "title": "Inventory Reservation: Stock Corruption",
+  "language": "Java",
+  "framework": "JDK 17+",
+  "difficulty": "Easy-Medium",
+  "estimatedMinutes": 30,
+  "bugCount": 5,
+  "candidateBrief": "An inventory service reports incorrect stock after reservation retries and cancellations. Find the validation and state-management defects while preserving inventory invariants.",
+  "topics": [
+    "input validation",
+    "state management",
+    "idempotency",
+    "data integrity"
+  ],
+  "runCommand": "mkdir -p out && javac -d out src/main/java/interview/*.java src/test/java/interview/*.java && java -cp out interview.InventoryTest",
+  "accessLevel": "FREE"
+}
