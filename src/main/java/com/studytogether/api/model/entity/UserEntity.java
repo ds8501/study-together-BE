@@ -32,6 +32,6 @@ public record UserEntity(
     }
 
     public SafeUserResponse toSafeUser() {
-        return new SafeUserResponse(id, name, email, avatar);
+        return new SafeUserResponse(id, name, email, avatar, createdAt);
     }
 }

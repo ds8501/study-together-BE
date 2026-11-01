@@ -11,6 +11,7 @@ import com.studytogether.api.model.entity.TopicEntity;
 import com.studytogether.api.repository.StudyTogetherRepository;
 import com.studytogether.api.util.QueryConstants;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -23,6 +24,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.YearMonth;
+import java.time.DateTimeException;
 import java.util.*;
 
 @Service
@@ -57,7 +60,8 @@ public class StudyService {
                 ((Number) row.get("id")).longValue(),
                 (String) row.get("name"),
                 (String) row.get("email"),
-                (String) row.get("avatar")
+                (String) row.get("avatar"),
+                null
         );
     }
 
@@ -101,6 +105,9 @@ public class StudyService {
                 .toList();
 
         String inviteCode = "OWNER".equals(membership.get("role")) ? String.valueOf(membership.get("inviteCode")) : null;
+        if (inviteCode != null && inviteCode.length() > 8) {
+            inviteCode = replaceInviteCode(workspaceId);
+        }
         WorkspaceResponse result = new WorkspaceResponse(
                 workspaceId,
                 String.valueOf(membership.get("name")),
@@ -204,8 +211,15 @@ public class StudyService {
         return ResponseEntity.ok(new StudyPlansResponse(responsePlans));
     }
 
-    public StudyStatsResponse studyStats(HttpServletRequest request) {
-        return readStats(sessionService.requireUserId(request));
+    public StudyStatsResponse studyStats(HttpServletRequest request, Integer year, Integer month) {
+        Long userId = sessionService.requireUserId(request);
+        if (year == null && month == null) return readStats(userId);
+        if (year == null || month == null) throw bad("Both year and month are required");
+        try {
+            return readStats(userId, YearMonth.of(year, month));
+        } catch (DateTimeException e) {
+            throw bad("Use a valid year and month");
+        }
     }
 
     public ResponseEntity<LogSessionResponse> logSession(LogSessionRequest request, HttpServletRequest httpRequest) {
@@ -289,6 +303,24 @@ public class StudyService {
         int bestStreak = streak != null ? streak.bestStreak() : 0;
         StudyStatsResponse stats = readStats(userId);
         return ResponseEntity.status(201).body(new LogSessionResponse(true, currentStreak, bestStreak, stats));
+    }
+
+    public ResponseEntity<Void> reorderTopics(Long planId, com.studytogether.api.model.dto.request.ReorderTopicsRequest request, HttpServletRequest httpRequest) {
+        if (request == null || request.topicIds() == null) throw bad("Topic order is required");
+        Long userId = sessionService.requireUserId(httpRequest);
+        List<Map<String, Object>> plans = db.queryForList(QueryConstants.STUDY_PLAN_OWNER_CHECK, params("user", userId, "plan", planId));
+        if (plans.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Roadmap not found for this account");
+        List<Long> currentIds = db.query(QueryConstants.TOPIC_IDS_FOR_PLAN, params("plan", planId, "user", userId), (rs, rowNum) -> rs.getLong("id"));
+        List<Long> requestedIds = request.topicIds();
+        if (requestedIds.size() != currentIds.size() || new HashSet<>(requestedIds).size() != requestedIds.size() || !new HashSet<>(requestedIds).equals(new HashSet<>(currentIds))) {
+            throw bad("Topic order must include every roadmap topic exactly once");
+        }
+        transactions.executeWithoutResult(status -> {
+            for (int position = 0; position < requestedIds.size(); position++) {
+                db.update(QueryConstants.UPDATE_TOPIC_ORDER, params("position", position, "topic", requestedIds.get(position), "plan", planId, "user", userId));
+            }
+        });
+        return ResponseEntity.noContent().build();
     }
 
     public ResponseEntity<TopicSingleResponse> addTopic(Long planId, CreateTopicRequest request, HttpServletRequest httpRequest) {
@@ -471,15 +503,31 @@ public class StudyService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the workspace owner can rotate the invite");
         }
         Object workspaceId = rows.get(0).get("workspaceId");
-        String inviteCode = sessionService.randomUrl(18);
-        db.update(
-                QueryConstants.UPDATE_WORKSPACE_INVITE,
-                params("code", inviteCode, "id", workspaceId)
-        );
+        String inviteCode = replaceInviteCode(((Number) workspaceId).longValue());
         return ResponseEntity.ok(new RotateInviteResponse(inviteCode));
     }
 
+    private String replaceInviteCode(Long workspaceId) {
+        for (int attempt = 0; attempt < 5; attempt++) {
+            String code = sessionService.randomUrl(6); // 8 URL-safe characters
+            try {
+                int updated = db.update(
+                        QueryConstants.UPDATE_WORKSPACE_INVITE,
+                        params("code", code, "id", workspaceId)
+                );
+                if (updated > 0) return code;
+            } catch (DuplicateKeyException ignored) {
+                // Generate another short code if the unique index reports a collision.
+            }
+        }
+        throw new IllegalStateException("Could not generate a unique workspace invite code");
+    }
+
     private StudyStatsResponse readStats(Long userId) {
+        return readStats(userId, null);
+    }
+
+    private StudyStatsResponse readStats(Long userId, YearMonth requestedMonth) {
         String zoneName = db.queryForOptional(
                 QueryConstants.USER_TIME_ZONE,
                 Map.of("id", userId),
@@ -516,8 +564,9 @@ public class StudyService {
             }
         }
 
-        LocalDate monthStart = today.withDayOfMonth(1);
-        LocalDate monthEnd = monthStart.plusMonths(1);
+        YearMonth selectedMonth = requestedMonth != null ? requestedMonth : YearMonth.from(today);
+        LocalDate monthStart = selectedMonth.atDay(1);
+        LocalDate monthEnd = selectedMonth.plusMonths(1).atDay(1);
         Instant monthStartInstant = monthStart.atStartOfDay(ZoneOffset.UTC).toInstant();
         Instant monthEndInstant = monthEnd.atStartOfDay(ZoneOffset.UTC).toInstant();
 
@@ -528,15 +577,20 @@ public class StudyService {
         );
 
         Set<LocalDate> active = new HashSet<>();
+        Map<LocalDate, Set<Long>> topicsByDate = new HashMap<>();
+        Map<LocalDate, Integer> minutesByDate = new HashMap<>();
         for (StudySessionEntity session : sessions) {
             if (session.date() != null) {
-                active.add(session.date().atZone(ZoneOffset.UTC).toLocalDate());
+                LocalDate sessionDay = session.date().atZone(ZoneOffset.UTC).toLocalDate();
+                active.add(sessionDay);
+                if (session.topicId() != null) topicsByDate.computeIfAbsent(sessionDay, ignored -> new HashSet<>()).add(session.topicId());
+                minutesByDate.merge(sessionDay, session.durationMinutes(), Integer::sum);
             }
         }
 
         String[] labels = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 
-        int daysInMonth = today.lengthOfMonth();
+        int daysInMonth = selectedMonth.lengthOfMonth();
         List<MonthDayStatsResponse> month = new ArrayList<>(daysInMonth);
         int totalDaysStudiedThisMonth = 0;
 
@@ -552,7 +606,9 @@ public class StudyService {
                     labels[date.getDayOfWeek().getValue() % 7],
                     isActive,
                     isToday,
-                    isFuture
+                    isFuture,
+                    topicsByDate.getOrDefault(date, Set.of()).size(),
+                    minutesByDate.getOrDefault(date, 0)
             ));
         }
 
@@ -567,9 +623,10 @@ public class StudyService {
             ));
         }
 
-        String monthName = today.getMonth().getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH);
-        int year = today.getYear();
+        String monthName = selectedMonth.getMonth().getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH);
+        int year = selectedMonth.getYear();
 
-        return new StudyStatsResponse(current, best, totalDaysStudiedThisMonth, monthName, year, month, week);
+        Integer totalStudyMinutes = db.queryForObject(QueryConstants.TOTAL_STUDY_MINUTES, Map.of("user", userId), Integer.class);
+        return new StudyStatsResponse(current, best, totalStudyMinutes == null ? 0 : totalStudyMinutes, totalDaysStudiedThisMonth, monthName, year, month, week);
     }
 }

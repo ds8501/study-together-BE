@@ -4,6 +4,7 @@ import com.studytogether.api.model.dto.response.AuthResponse;
 import com.studytogether.api.model.dto.request.LoginRequest;
 import com.studytogether.api.model.dto.response.OkResponse;
 import com.studytogether.api.model.dto.request.RegisterRequest;
+import com.studytogether.api.model.dto.request.UpdateProfileRequest;
 import com.studytogether.api.model.entity.UserEntity;
 import com.studytogether.api.model.entity.WorkspaceEntity;
 import com.studytogether.api.repository.StudyTogetherRepository;
@@ -119,7 +120,7 @@ public class AuthService {
                 if (workspace == null) {
                     workspaceId = db.queryForObject(
                             QueryConstants.INSERT_WORKSPACE,
-                            params("name", planWorkspaceName, "code", sessionService.randomUrl(18)),
+                            params("name", planWorkspaceName, "code", sessionService.randomUrl(6)),
                             Long.class
                     );
                     role = "OWNER";
@@ -179,6 +180,20 @@ public class AuthService {
     public OkResponse logout(HttpServletResponse response) {
         sessionService.clearSession(response);
         return new OkResponse(true);
+    }
+
+    public ResponseEntity<AuthResponse> updateProfile(UpdateProfileRequest request, HttpServletRequest httpRequest) {
+        if (request == null) throw bad("Request body is required");
+        String name = requiredText(request.name(), "name", 2, 80);
+        String avatar = request.avatar();
+        if (avatar != null && !java.util.Set.of("emoji:🌿", "emoji:🌙", "emoji:🔥", "emoji:🌸", "emoji:🪴", "emoji:☀️", "emoji:🐳", "emoji:⭐").contains(avatar)) {
+            throw bad("Choose one of the available profile avatars");
+        }
+        Long userId = sessionService.requireUserId(httpRequest);
+        db.update(QueryConstants.UPDATE_USER_PROFILE, params("name", name, "avatar", avatar, "id", userId));
+        UserEntity user = db.queryForOptional(QueryConstants.SAFE_USER_BY_ID, Map.of("id", userId), UserEntity.ROW_MAPPER)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Account not found"));
+        return ResponseEntity.ok(new AuthResponse(user.toSafeUser()));
     }
 
     public ResponseEntity<AuthResponse> me(HttpServletRequest request) {

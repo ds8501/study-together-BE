@@ -2,6 +2,7 @@ package com.studytogether.api.controller;
 
 import com.studytogether.api.model.dto.request.CreateTopicRequest;
 import com.studytogether.api.model.dto.request.LogSessionRequest;
+import com.studytogether.api.model.dto.request.ReorderTopicsRequest;
 import com.studytogether.api.model.dto.request.UpdateTopicRequest;
 import com.studytogether.api.model.dto.response.*;
 import com.studytogether.api.service.StudyService;
@@ -13,6 +14,8 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -39,8 +42,10 @@ public class StudyController {
     }
 
     @GetMapping("/study-stats")
-    public StudyStatsResponse studyStats(HttpServletRequest request) {
-        return studyService.studyStats(request);
+    public StudyStatsResponse studyStats(HttpServletRequest request,
+                                         @RequestParam(required = false) Integer year,
+                                         @RequestParam(required = false) Integer month) {
+        return studyService.studyStats(request, year, month);
     }
 
     @PostMapping("/study-sessions")
@@ -51,6 +56,11 @@ public class StudyController {
     @PostMapping("/study-plans/{planId}/topics")
     public ResponseEntity<TopicSingleResponse> addTopic(@PathVariable Long planId, @RequestBody CreateTopicRequest request, HttpServletRequest httpRequest) {
         return studyService.addTopic(planId, request, httpRequest);
+    }
+
+    @PutMapping("/study-plans/{planId}/topics/order")
+    public ResponseEntity<Void> reorderTopics(@PathVariable Long planId, @RequestBody ReorderTopicsRequest request, HttpServletRequest httpRequest) {
+        return studyService.reorderTopics(planId, request, httpRequest);
     }
 
     @PatchMapping("/topics/{topicId}")

@@ -5,6 +5,7 @@ import java.util.List;
 public record StudyStatsResponse(
         int currentStreak,
         int bestStreak,
+        int totalStudyMinutes,
         int totalDaysStudiedThisMonth,
         String monthName,
         int year,

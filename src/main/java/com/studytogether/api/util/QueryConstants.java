@@ -5,8 +5,9 @@ public final class QueryConstants {
   private QueryConstants() {}
 
   // User queries
-  public static final String USER_BY_EMAIL = "SELECT \"id\",\"name\",\"email\",\"avatar\",\"passwordHash\" FROM \"User\" WHERE \"email\"=:email";
-  public static final String SAFE_USER_BY_ID = "SELECT \"id\",\"name\",\"email\",\"avatar\" FROM \"User\" WHERE \"id\"=:id";
+  public static final String USER_BY_EMAIL = "SELECT \"id\",\"name\",\"email\",\"avatar\",\"passwordHash\",\"timeZone\",\"createdAt\" FROM \"User\" WHERE \"email\"=:email";
+  public static final String SAFE_USER_BY_ID = "SELECT \"id\",\"name\",\"email\",\"avatar\",\"timeZone\",\"createdAt\" FROM \"User\" WHERE \"id\"=:id";
+  public static final String UPDATE_USER_PROFILE = "UPDATE \"User\" SET \"name\"=:name,\"avatar\"=:avatar WHERE \"id\"=:id";
   public static final String USER_ID_BY_EMAIL = "SELECT \"id\" FROM \"User\" WHERE \"email\"=:email";
   public static final String USER_TIME_ZONE = "SELECT \"timeZone\" FROM \"User\" WHERE \"id\"=:id";
   public static final String UPDATE_USER_TIME_ZONE = "UPDATE \"User\" SET \"timeZone\"=:zone WHERE \"id\"=:id";
@@ -39,6 +40,8 @@ public final class QueryConstants {
   // Topic queries
   public static final String TOPICS_FOR_PLAN = "SELECT t.*, c.\"id\" AS c_id,c.\"studyPlanId\" AS c_plan,c.\"name\" AS c_name,c.\"description\" AS c_description,c.\"icon\" AS c_icon,c.\"color\" AS c_color,c.\"order\" AS c_order FROM \"Topic\" t LEFT JOIN \"Category\" c ON c.\"id\"=t.\"categoryId\" AND c.\"studyPlanId\"=t.\"studyPlanId\" WHERE t.\"studyPlanId\"=:plan ORDER BY t.\"dayNumber\" NULLS LAST,t.\"order\"";
   public static final String TOPIC_BY_ID = "SELECT * FROM \"Topic\" WHERE \"id\"=:id";
+  public static final String TOPIC_IDS_FOR_PLAN = "SELECT \"id\" FROM \"Topic\" WHERE \"studyPlanId\"=:plan AND \"ownerId\"=:user ORDER BY \"dayNumber\" NULLS LAST, \"order\"";
+  public static final String UPDATE_TOPIC_ORDER = "UPDATE \"Topic\" SET \"order\"=:position, \"updatedAt\"=CURRENT_TIMESTAMP WHERE \"id\"=:topic AND \"studyPlanId\"=:plan AND \"ownerId\"=:user";
   public static final String TOPIC_CHECK_FOR_SESSION = "SELECT t.\"id\" FROM \"Topic\" t JOIN \"StudyPlan\" p ON p.\"id\"=t.\"studyPlanId\" AND p.\"ownerId\"=t.\"ownerId\" JOIN \"WorkspaceMember\" wm ON wm.\"workspaceId\"=p.\"workspaceId\" AND wm.\"userId\"=:user WHERE t.\"id\"=:topic AND t.\"ownerId\"=:user";
   public static final String TOPIC_FOR_UPDATE = "SELECT t.* FROM \"Topic\" t JOIN \"StudyPlan\" p ON p.\"id\"=t.\"studyPlanId\" AND p.\"ownerId\"=t.\"ownerId\" JOIN \"WorkspaceMember\" wm ON wm.\"workspaceId\"=p.\"workspaceId\" AND wm.\"userId\"=:user WHERE t.\"id\"=:topic AND t.\"ownerId\"=:user";
   public static final String INSERT_TOPIC = "INSERT INTO \"Topic\" (\"categoryId\",\"studyPlanId\",\"ownerId\",\"title\",\"description\",\"dayNumber\",\"order\",\"difficulty\",\"priority\",\"estimatedHours\",\"status\",\"createdAt\",\"updatedAt\") VALUES (:category,:plan,:owner,:title,:description,:day,(SELECT COUNT(*) FROM \"Topic\" WHERE \"studyPlanId\"=:plan),CAST(:difficulty AS \"TopicDifficulty\"),CAST(:priority AS \"TopicPriority\"),:hours,CAST(:status AS \"TopicStatus\"),CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) RETURNING \"id\"";
@@ -46,7 +49,8 @@ public final class QueryConstants {
 
   // StudySession queries
   public static final String WEEKLY_SESSIONS = "SELECT \"date\" FROM \"StudySession\" WHERE \"userId\"=:user AND \"date\">=:start AND \"date\"<:end";
-  public static final String MONTHLY_SESSIONS = "SELECT \"date\" FROM \"StudySession\" WHERE \"userId\"=:user AND \"date\">=:start AND \"date\"<:end";
+  public static final String TOTAL_STUDY_MINUTES = "SELECT COALESCE(SUM(\"durationMinutes\"),0) FROM \"StudySession\" WHERE \"userId\"=:user";
+  public static final String MONTHLY_SESSIONS = "SELECT \"id\",\"userId\",\"topicId\",\"date\",\"durationMinutes\",\"notes\" FROM \"StudySession\" WHERE \"userId\"=:user AND \"date\">=:start AND \"date\"<:end";
   public static final String INSERT_STUDY_SESSION = "INSERT INTO \"StudySession\" (\"userId\",\"topicId\",\"date\",\"durationMinutes\",\"notes\") VALUES (:user,:topic,:date,:minutes,:notes) RETURNING \"id\"";
 
   // StudyStreak queries

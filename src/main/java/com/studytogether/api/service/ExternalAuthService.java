@@ -313,7 +313,7 @@ public class ExternalAuthService {
 
             Long workspaceId = db.queryForObject(
                     QueryConstants.INSERT_WORKSPACE,
-                    params("name", "Study Room", "code", sessionService.randomUrl(18)),
+                    params("name", "Study Room", "code", sessionService.randomUrl(6)),
                     Long.class
             );
 
