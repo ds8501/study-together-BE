@@ -34,7 +34,7 @@ Deploy this backend repository as a **Web Service** using its Dockerfile:
 2. In Render, choose **New → Web Service**, connect this backend repository, and choose **Docker** as the runtime. Keep the old Node service running until the new Java service passes the checks below.
 3. Keep the root directory as `.`. Render builds the Java 21 Spring Boot service from `Dockerfile`.
 4. Add these environment variables:
-   - `DATABASE_URL`: the existing Render Postgres **Internal Database URL**. Keep using the database that contains your existing users and plans.
+   - `DATABASE_URL`: a PostgreSQL connection string. For Supabase on Render, use the **Session pooler** connection string and replace its password placeholder. Alternatively, set the JDBC URL in `DATABASE_URL` and set `SPRING_DATASOURCE_USERNAME` and `SPRING_DATASOURCE_PASSWORD` separately. Keep these credentials in Render environment settings; do not commit them.
    - `AUTH_SECRET`: keep the same secret as the current backend (and ensure it is at least 32 characters) so existing browser sessions remain valid.
    - `FRONTEND_ORIGIN`: `https://study-together-five.vercel.app`
    - `FRONTEND_URL`: `https://study-together-five.vercel.app`

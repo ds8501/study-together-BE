@@ -21,7 +21,10 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class ApiConfiguration {
     @Bean
-    DataSource dataSource(@Value("${DATABASE_URL:${JDBC_DATABASE_URL:}}") String rawUrl) {
+    DataSource dataSource(
+            @Value("${DATABASE_URL:${JDBC_DATABASE_URL:}}") String rawUrl,
+            @Value("${SPRING_DATASOURCE_USERNAME:${DB_USERNAME:}}") String configuredUsername,
+            @Value("${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:}}") String configuredPassword) {
         if (rawUrl == null || rawUrl.isBlank()) throw new IllegalStateException("DATABASE_URL must be set");
         String url = rawUrl.trim();
         String username = null;
@@ -43,8 +46,12 @@ public class ApiConfiguration {
             }
         }
         DataSourceBuilder<?> builder = DataSourceBuilder.create().driverClassName("org.postgresql.Driver").url(url);
-        if (username != null) builder.username(username);
-        if (password != null) builder.password(password);
+        String effectiveUsername = configuredUsername == null || configuredUsername.isBlank()
+                ? username : configuredUsername.trim();
+        String effectivePassword = configuredPassword == null || configuredPassword.isBlank()
+                ? password : configuredPassword;
+        if (effectiveUsername != null) builder.username(effectiveUsername);
+        if (effectivePassword != null) builder.password(effectivePassword);
         return builder.build();
     }
 
